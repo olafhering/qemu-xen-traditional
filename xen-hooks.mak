@@ -2,6 +2,7 @@ CPPFLAGS+= -I$(XEN_ROOT)/tools/libs/toollog/include
 CPPFLAGS+= -I$(XEN_ROOT)/tools/libs/evtchn/include
 CPPFLAGS+= -I$(XEN_ROOT)/tools/libs/gnttab/include
 CPPFLAGS+= -DXC_WANT_COMPAT_MAP_FOREIGN_API
+CPPFLAGS+= -DXC_WANT_COMPAT_DEVICEMODEL_API
 CPPFLAGS+= -I$(XEN_ROOT)/tools/libxc/include
 CPPFLAGS+= -I$(XEN_ROOT)/tools/xenstore/include
 CPPFLAGS+= -I$(XEN_ROOT)/tools/include
