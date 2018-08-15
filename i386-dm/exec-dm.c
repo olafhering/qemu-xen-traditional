@@ -294,8 +294,10 @@ void cpu_register_physical_memory(target_phys_addr_t start_addr,
 
     for (i = 0; i < mmio_cnt; i++) { 
         if(mmio[i].start == start_addr) {
+            unmap_mmio_range(start_addr, mmio[i].size);
             mmio[i].io_index = phys_offset;
             mmio[i].size = size;
+            map_mmio_range(start_addr, size);
             return;
         }
     }
@@ -308,6 +310,7 @@ void cpu_register_physical_memory(target_phys_addr_t start_addr,
     mmio[mmio_cnt].io_index = phys_offset;
     mmio[mmio_cnt].start = start_addr;
     mmio[mmio_cnt++].size = size;
+    map_mmio_range(start_addr, size);
 }
 
 static int get_free_io_mem_idx(void)
@@ -360,9 +363,10 @@ void cpu_unregister_io_memory(int io_table_address)
     int io_index = io_table_address >> IO_MEM_SHIFT;
 
     for (i = 0; i < mmio_cnt; i++) {
-	if (mmio[i].io_index == io_index) {
-	   mmio[i].start = mmio[i].size = 0;
-	   break;
+        if (mmio[i].io_index == io_index) {
+            unmap_mmio_range(mmio[i].start, mmio[i].size);
+            mmio[i].start = mmio[i].size = 0;
+            break;
 	}
     }
 

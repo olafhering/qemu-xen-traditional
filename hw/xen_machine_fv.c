@@ -30,6 +30,7 @@
 #include "qemu-xen.h"
 #include "qemu-aio.h"
 #include "xen_backend.h"
+#include "pci.h"
 
 #include <xen/hvm/params.h>
 #include <sys/mman.h>
@@ -270,6 +271,17 @@ void qemu_invalidate_entry(uint8_t *buffer) {};
 
 #endif /* defined(MAPCACHE) */
 
+static ioservid_t ioservid;
+
+void xen_enable_io(void)
+{
+    xc_hvm_set_ioreq_server_state(xc_handle, domid, ioservid, 1);
+}
+
+void xen_disable_io(void)
+{
+    xc_hvm_set_ioreq_server_state(xc_handle, domid, ioservid, 0);
+}
 
 static void xen_init_fv(ram_addr_t ram_size, int vga_ram_size,
 			const char *boot_device,
@@ -277,7 +289,9 @@ static void xen_init_fv(ram_addr_t ram_size, int vga_ram_size,
                         const char *initrd_filename, const char *cpu_model,
                         const char *direct_pci)
 {
-    unsigned long ioreq_pfn;
+    extern xen_pfn_t ioreq_pfn;
+    extern xen_pfn_t bufioreq_pfn;
+    extern evtchn_port_t bufioreq_evtchn;
     extern void *shared_page;
     extern void *buffered_io_page;
 #ifdef __ia64__
@@ -295,10 +309,22 @@ static void xen_init_fv(ram_addr_t ram_size, int vga_ram_size,
     }
 #endif
 
-#ifdef CONFIG_STUBDOM /* the hvmop is not supported on older hypervisors */
-    xc_set_hvm_param(xc_handle, domid, HVM_PARAM_DM_DOMAIN, DOMID_SELF);
-#endif
-    xc_get_hvm_param(xc_handle, domid, HVM_PARAM_IOREQ_PFN, &ioreq_pfn);
+    if (xc_hvm_create_ioreq_server(xc_handle, domid,
+                                   HVM_IOREQSRV_BUFIOREQ_ATOMIC,
+                                   &ioservid)) {
+        fprintf(logfile, "failed to create ioreq server: error %d\n",
+                errno);
+        exit(-1);
+    }
+
+    if (xc_hvm_get_ioreq_server_info(xc_handle, domid, ioservid,
+                                     &ioreq_pfn, &bufioreq_pfn,
+                                     &bufioreq_evtchn)) {
+        fprintf(logfile, "failed to get ioreq server info: error %d\n",
+                errno);
+        exit(-1);
+    }
+
     fprintf(logfile, "shared page at pfn %lx\n", ioreq_pfn);
     shared_page = xc_map_foreign_range(xc_handle, domid, XC_PAGE_SIZE,
                                        PROT_READ|PROT_WRITE, ioreq_pfn);
@@ -307,14 +333,16 @@ static void xen_init_fv(ram_addr_t ram_size, int vga_ram_size,
         exit(-1);
     }
 
-    xc_get_hvm_param(xc_handle, domid, HVM_PARAM_BUFIOREQ_PFN, &ioreq_pfn);
-    fprintf(logfile, "buffered io page at pfn %lx\n", ioreq_pfn);
+    fprintf(logfile, "buffered io page at pfn %lx\n", bufioreq_pfn);
     buffered_io_page = xc_map_foreign_range(xc_handle, domid, XC_PAGE_SIZE,
-                                            PROT_READ|PROT_WRITE, ioreq_pfn);
+                                            PROT_READ|PROT_WRITE,
+                                            bufioreq_pfn);
     if (buffered_io_page == NULL) {
         fprintf(logfile, "map buffered IO page returned error %d\n", errno);
         exit(-1);
     }
+
+    xen_enable_io();
 
 #if defined(__ia64__)
     xc_get_hvm_param(xc_handle, domid, HVM_PARAM_BUFPIOREQ_PFN, &ioreq_pfn);
@@ -377,6 +405,37 @@ static void xen_init_fv(ram_addr_t ram_size, int vga_ram_size,
     pc_machine.init(ram_size, vga_ram_size, boot_device,
 		    kernel_filename, kernel_cmdline, initrd_filename,
 		    cpu_model, direct_pci);
+
+    xc_hvm_map_io_range_to_ioreq_server(xc_handle, domid, ioservid,
+                                        0, 0, 65536);
+}
+
+void map_mmio_range(target_phys_addr_t start_addr, ram_addr_t size)
+{
+    ram_addr_t end_addr = start_addr + size - 1;
+
+    xc_hvm_map_io_range_to_ioreq_server(xc_handle, domid, ioservid,
+                                        1, start_addr, end_addr);
+}
+
+void unmap_mmio_range(target_phys_addr_t start_addr, ram_addr_t size)
+{
+    ram_addr_t end_addr = start_addr + size - 1;
+
+    xc_hvm_unmap_io_range_from_ioreq_server(xc_handle, domid, ioservid,
+                                            1, start_addr, end_addr);
+}
+
+void map_pci_dev(int devfn)
+{
+    xc_hvm_map_pcidev_to_ioreq_server(xc_handle, domid, ioservid, 0, 0,
+                                      PCI_SLOT(devfn), PCI_FUNC(devfn));
+}
+
+void unmap_pci_dev(int devfn)
+{
+    xc_hvm_unmap_pcidev_from_ioreq_server(xc_handle, domid, ioservid, 0, 0,
+                                          PCI_SLOT(devfn), PCI_FUNC(devfn));
 }
 
 QEMUMachine xenfv_machine = {

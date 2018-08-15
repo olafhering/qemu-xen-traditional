@@ -138,4 +138,12 @@ int has_tpm_device_danger(void);
 static void vga_dirty_log_start(void *s) { }
 static void vga_dirty_log_stop(void *s) { }
 
+void xen_enable_io(void);
+void xen_disable_io(void);
+
+void map_mmio_range(target_phys_addr_t start_addr, ram_addr_t size);
+void unmap_mmio_range(target_phys_addr_t start_addr, ram_addr_t size);
+void map_pci_dev(int devfn);
+void unmap_pci_dev(int devfn);
+
 #endif /*QEMU_XEN_H*/

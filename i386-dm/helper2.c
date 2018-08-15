@@ -98,6 +98,10 @@ int domid_backend = 0;
 
 long time_offset = 0;
 
+xen_pfn_t ioreq_pfn;
+xen_pfn_t bufioreq_pfn;
+evtchn_port_t bufioreq_evtchn;
+
 shared_iopage_t *shared_page = NULL;
 
 #define BUFFER_IO_MAX_DELAY  100
@@ -120,7 +124,6 @@ CPUX86State *cpu_x86_init(const char *cpu_model)
     CPUX86State *env;
     static int inited;
     int i, rc;
-    unsigned long bufioreq_evtchn;
 
     env = qemu_mallocz(sizeof(CPUX86State));
     if (!env)
@@ -157,13 +160,6 @@ CPUX86State *cpu_x86_init(const char *cpu_model)
                 return NULL;
             }
             ioreq_local_port[i] = rc;
-        }
-        rc = xc_get_hvm_param(xc_handle, domid, HVM_PARAM_BUFIOREQ_EVTCHN,
-                &bufioreq_evtchn);
-        if (rc < 0) {
-            fprintf(logfile, "failed to get HVM_PARAM_BUFIOREQ_EVTCHN error=%d\n",
-                    errno);
-            return NULL;
         }
         rc = xenevtchn_bind_interdomain(xce_handle, domid, (uint32_t)bufioreq_evtchn);
         if (rc == -1) {
@@ -489,6 +485,27 @@ static void __handle_ioreq(CPUState *env, ioreq_t *req)
     case IOREQ_TYPE_INVALIDATE:
         qemu_invalidate_map_cache();
         break;
+    case IOREQ_TYPE_PCI_CONFIG: {
+        uint32_t sbdf = req->addr >> 32;
+        uint32_t val;
+
+        /*
+         * QEMU doesn't support MMCFG, so replay the Config cycle as if it has
+         * been issued via the legacy cf8/cfc mechanism.
+         */
+
+        /* Fake out to 0xcf8 */
+        val = (1u << 31) |
+            ((req->addr & 0x0f00) << 16) |
+            ((sbdf & 0xffff) << 8) |
+            (req->addr & 0xfc);
+        do_outp(env, 0xcf8, 4, val);
+
+        /* Now fake I/O to 0xcfc */
+        req->addr = 0xcfc | (req->addr & 0x03);
+        cpu_ioreq_pio(env, req);
+        break;
+    }
     default:
         hw_error("Invalid ioreq type 0x%x\n", req->type);
     }
@@ -645,6 +662,7 @@ int main_loop(void)
 
         /* Save the device state */
         asprintf(&qemu_file, "/var/lib/xen/qemu-save.%d", domid);
+        xen_disable_io();
         do_savevm(qemu_file);
         free(qemu_file);
 
@@ -658,6 +676,7 @@ int main_loop(void)
                 xenstore_process_event(NULL);
         }
 
+        xen_enable_io();
         xenstore_record_dm_state("running");
     }
 

@@ -263,6 +263,8 @@ PCIDevice *pci_register_device(PCIBus *bus, const char *name,
     pci_dev->config_write = config_write;
     bus->devices[devfn] = pci_dev;
     pci_dev->irq = qemu_allocate_irqs(pci_set_irq, pci_dev, 4);
+
+    map_pci_dev(pci_dev->devfn);
     return pci_dev;
 }
 
@@ -305,6 +307,7 @@ int pci_unregister_device(PCIDevice *pci_dev)
 {
     int ret = 0;
 
+    unmap_pci_dev(pci_dev->devfn);
     if (pci_dev->unregister)
         ret = pci_dev->unregister(pci_dev);
     if (ret)
