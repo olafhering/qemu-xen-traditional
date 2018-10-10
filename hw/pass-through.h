@@ -191,6 +191,7 @@ struct pt_region {
 struct pt_msi_info {
     uint32_t flags;
     uint32_t ctrl_offset; /* saved control offset */
+    uint32_t mask;     /* guest mask bits */
     int pirq;          /* guest pirq corresponding */
     uint32_t addr_lo;  /* guest message address */
     uint32_t addr_hi;  /* guest message upper address */

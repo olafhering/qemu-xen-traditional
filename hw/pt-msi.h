@@ -33,6 +33,14 @@
 #define PCI_MSIX_PBA        8
 #define  PCI_MSIX_BIR       0x7
 
+/* MSI-X Table entry format */
+#define PCI_MSIX_ENTRY_SIZE             16
+#define  PCI_MSIX_ENTRY_LOWER_ADDR      0
+#define  PCI_MSIX_ENTRY_UPPER_ADDR      4
+#define  PCI_MSIX_ENTRY_DATA            8
+#define  PCI_MSIX_ENTRY_VECTOR_CTRL     12
+#define   PCI_MSIX_ENTRY_CTRL_MASKBIT   1
+
 #define MSI_FLAG_UNINIT 0x1000
 #define PT_MSI_MAPPED   0x2000
 
@@ -77,6 +85,7 @@
 #define GFLAGS_SHIFT_DM             9
 #define GLFAGS_SHIFT_DELIV_MODE     12
 #define GLFAGS_SHIFT_TRG_MODE       15
+#define GLFAGS_SHIFT_UNMASKED       16
 
 void
 msi_set_enable(struct pt_dev *dev, int en);

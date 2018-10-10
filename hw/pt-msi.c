@@ -138,6 +138,9 @@ int pt_msi_update(struct pt_dev *d)
     addr = (uint64_t)d->msi->addr_hi << 32 | d->msi->addr_lo;
     gflags = __get_msi_gflags(d->msi->data, addr);
 
+    /* Current MSI emulation in QEMU only supports 1 vector */
+    gflags |= (d->msi->mask & 1) ? 0 : (1u << GLFAGS_SHIFT_UNMASKED);
+
     PT_LOG("Update msi with pirq %x gvec %x gflags %x\n",
            d->msi->pirq, gvec, gflags);
 
@@ -275,7 +278,8 @@ void pt_disable_msi_translate(struct pt_dev *dev)
     }
 }
 
-static int pt_msix_update_one(struct pt_dev *dev, int entry_nr)
+static int pt_msix_update_one(struct pt_dev *dev, int entry_nr,
+                              uint32_t vec_ctrl)
 {
     struct msix_entry_info *entry = &dev->msix->msix_entry[entry_nr];
     int pirq = entry->pirq;
@@ -316,6 +320,9 @@ static int pt_msix_update_one(struct pt_dev *dev, int entry_nr)
         entry->pirq = pirq;
     }
 
+    gflags |= (vec_ctrl & PCI_MSIX_ENTRY_CTRL_MASKBIT) ? 0 :
+        (1u << GLFAGS_SHIFT_UNMASKED);
+
     PT_LOG("Update msix entry %x with pirq %x gvec %x\n",
             entry_nr, pirq, gvec);
 
@@ -343,7 +350,7 @@ int pt_msix_update(struct pt_dev *dev)
 
     for ( i = 0; i < msix->total_entries; i++ )
     {
-        pt_msix_update_one(dev, i);
+        pt_msix_update_one(dev, i, msix->msix_entry[i].io_mem[3]);
     }
 
     return 0;
@@ -479,8 +486,18 @@ static void pci_msix_writel(void *opaque, target_phys_addr_t addr, uint32_t val)
 
     if ( offset == 3 )
     {
-        if ( msix->enabled && !(val & 0x1) )
-            pt_msix_update_one(dev, entry_nr);
+        if ( msix->enabled && !(val & 0x1) ) {
+            const volatile uint32_t *vec_ctrl;
+
+            /*
+             * If Xen intercepts the mask bit access, io_mem[3] may not be
+             * up-to-date. Read from hardware directly.
+             */
+            vec_ctrl = dev->msix->phys_iomem_base +
+                PCI_MSIX_ENTRY_SIZE * entry_nr + PCI_MSIX_ENTRY_VECTOR_CTRL;
+
+            pt_msix_update_one(dev, entry_nr, *vec_ctrl);
+        }
     }
 }
 

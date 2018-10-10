@@ -188,6 +188,9 @@ static int pt_word_reg_write(struct pt_dev *ptdev,
 static int pt_long_reg_write(struct pt_dev *ptdev,
     struct pt_reg_tbl *cfg_entry,
     uint32_t *value, uint32_t dev_value, uint32_t valid_mask);
+static int pt_mask_reg_write(struct pt_dev *ptdev,
+    struct pt_reg_tbl *cfg_entry,
+    uint32_t *value, uint32_t dev_value, uint32_t valid_mask);
 static int pt_cmd_reg_write(struct pt_dev *ptdev,
     struct pt_reg_tbl *cfg_entry,
     uint16_t *value, uint16_t dev_value, uint16_t valid_mask);
@@ -755,7 +758,7 @@ static struct pt_reg_info_tbl pt_emu_reg_msi_tbl[] = {
         .emu_mask   = 0xFFFFFFFF,
         .init       = pt_mask_reg_init,
         .u.dw.read  = pt_long_reg_read,
-        .u.dw.write = pt_long_reg_write,
+        .u.dw.write = pt_mask_reg_write,
     },
     /* Mask reg (if PCI_MSI_FLAGS_MASK_BIT set, for 64-bit devices) */
     {
@@ -766,7 +769,7 @@ static struct pt_reg_info_tbl pt_emu_reg_msi_tbl[] = {
         .emu_mask   = 0xFFFFFFFF,
         .init       = pt_mask_reg_init,
         .u.dw.read  = pt_long_reg_read,
-        .u.dw.write = pt_long_reg_write,
+        .u.dw.write = pt_mask_reg_write,
     },
     /* Pending reg (if PCI_MSI_FLAGS_MASK_BIT set, for 32-bit devices) */
     {
@@ -3568,6 +3571,22 @@ static int pt_long_reg_write(struct pt_dev *ptdev,
 
     /* create value for writing to I/O device register */
     *value = PT_MERGE_VALUE(*value, dev_value, throughable_mask);
+
+    return 0;
+}
+
+/* write guest mask bits */
+static int pt_mask_reg_write(struct pt_dev *ptdev,
+        struct pt_reg_tbl *cfg_entry,
+        uint32_t *value, uint32_t dev_value, uint32_t valid_mask)
+{
+    int rc;
+
+    rc = pt_long_reg_write(ptdev, cfg_entry, value, dev_value, valid_mask);
+    if (rc)
+        return rc;
+
+    ptdev->msi->mask = *value;
 
     return 0;
 }
