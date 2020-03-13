@@ -31,6 +31,7 @@
 #include "qemu-aio.h"
 #include "xen_backend.h"
 #include "pci.h"
+#include "sysemu.h"
 
 #include <xen/hvm/params.h>
 #include <sys/mman.h>
@@ -66,6 +67,8 @@ TAILQ_HEAD(map_cache_head, map_cache_rev) locked_entries = TAILQ_HEAD_INITIALIZE
 /* For most cases (>99.9%), the page address is the same. */
 static unsigned long last_address_page = ~0UL;
 static uint8_t      *last_address_vaddr;
+
+static Notifier exit_notifier;
 
 static int qemu_map_cache_init(void)
 {
@@ -283,6 +286,11 @@ void xen_disable_io(void)
     xc_hvm_set_ioreq_server_state(xc_handle, domid, ioservid, 0);
 }
 
+static void xen_exit_notifier(Notifier *n)
+{
+    xc_hvm_destroy_ioreq_server(xc_handle, domid, ioservid);
+}
+
 static void xen_init_fv(ram_addr_t ram_size, int vga_ram_size,
 			const char *boot_device,
 			const char *kernel_filename,const char *kernel_cmdline,
@@ -316,6 +324,9 @@ static void xen_init_fv(ram_addr_t ram_size, int vga_ram_size,
                 errno);
         exit(-1);
     }
+
+    exit_notifier.notify = xen_exit_notifier;
+    qemu_add_exit_notifier(&exit_notifier);
 
     if (xc_hvm_get_ioreq_server_info(xc_handle, domid, ioservid,
                                      &ioreq_pfn, &bufioreq_pfn,
