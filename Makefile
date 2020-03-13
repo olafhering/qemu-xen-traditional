@@ -93,6 +93,7 @@ OBJS+=sd.o ssi-sd.o
 OBJS+=bt.o bt-host.o bt-vhci.o bt-l2cap.o bt-sdp.o bt-hci.o bt-hid.o usb-bt.o
 OBJS+=buffered_file.o migration.o migration-tcp.o net.o qemu-sockets.o
 OBJS+=qemu-char.o aio.o net-checksum.o savevm.o cache-utils.o
+OBJS+=notify.o
 
 ifdef CONFIG_BRLAPI
 OBJS+= baum.o
