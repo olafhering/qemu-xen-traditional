@@ -282,6 +282,9 @@ uint8_t qemu_uuid[16];
 
 #include "xen-vl-extra.c"
 
+static NotifierList exit_notifiers =
+    NOTIFIER_LIST_INITIALIZER(exit_notifiers);
+
 /***********************************************************/
 /* x86 ISA bus support */
 
@@ -4843,6 +4846,21 @@ static void vcpu_hex_str_to_bitmap(const char *optarg)
     }
 }
 
+void qemu_add_exit_notifier(Notifier *notify)
+{
+    notifier_list_add(&exit_notifiers, notify);
+}
+
+void qemu_remove_exit_notifier(Notifier *notify)
+{
+    notifier_list_remove(notify);
+}
+
+static void qemu_run_exit_notifiers(void)
+{
+    notifier_list_notify(&exit_notifiers);
+}
+
 int main(int argc, char **argv, char **envp)
 {
 #ifdef CONFIG_GDBSTUB
@@ -4886,6 +4904,8 @@ int main(int argc, char **argv, char **envp)
     struct passwd *pwd = NULL;
     const char *chroot_dir = NULL;
     const char *run_as = NULL;
+
+    atexit(qemu_run_exit_notifiers);
 
     qemu_cache_utils_init(envp);
     logfile = stderr; /* initial value */

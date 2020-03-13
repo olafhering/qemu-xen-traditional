@@ -2,6 +2,8 @@
 #define SYSEMU_H
 /* Misc. things related to the system emulator.  */
 
+#include "notify.h"
+
 /* vl.c */
 extern const char *bios_name;
 extern const char *bios_dir;
@@ -38,6 +40,9 @@ int qemu_powerdown_requested(void);
 void qemu_system_powerdown(void);
 #endif
 void qemu_system_reset(void);
+
+void qemu_add_exit_notifier(Notifier *notify);
+void qemu_remove_exit_notifier(Notifier *notify);
 
 void do_savevm(const char *name);
 void do_loadvm(const char *name);
